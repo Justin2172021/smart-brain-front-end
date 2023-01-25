@@ -1,0 +1,127 @@
+import React, { Component } from "react";
+import './App.css';
+import Navigation from '../components/navigation/Navigation';
+import Logo from '../components/logo/Logo';
+import Rank from "../components/rank/Rank";
+import ImageLinkForm from '../components/imageLinkForm/ImageLinkForm';
+import ParticlesBg from 'particles-bg'
+import FaceRecognition from "../components/faceRecognition/FaceRecognition";
+import SignIn from "./signin/SignIn";
+import Register from "./register/Register";
+
+const initialState = {
+  input: "",
+  IMAGE_URL: "",
+  box: {},
+  route: "SignIn",
+  isSignedIn: false,
+  user: {
+    id: "",
+    name: "",
+    email: "",
+    entries: 0,
+    joined: ""
+        }   
+}
+
+class App extends Component {
+  constructor() {
+    super();
+    this.state = initialState;
+  }
+
+  loadUser = (data) => {
+    this.setState({user: {
+      id: data.id,
+      name: data.name,
+      email: data.email,
+      entries: data.entries,
+      joined: data.joined
+    }})
+  }
+
+  calculateFaceLocation = (data) => {
+    const clarifaiFace = data.outputs[0].data.regions[0].region_info.bounding_box;
+    const image = document.getElementById("inputimage");
+    const width = Number(image.width);
+    const height = Number(image.height);
+    return {
+      leftCol: clarifaiFace.left_col * width,
+      topRow: clarifaiFace.top_row * height,
+      rightCol: width - (clarifaiFace.right_col * width),
+      bottomRow: height - (clarifaiFace.bottom_row * height)
+    }
+  }
+
+  displayFaceBox = (box) => {
+    this.setState({ box: box });
+  }
+
+  onInputChange = (event) => {
+    this.setState({ input: event.target.value });
+  }
+
+  onButtonSubmit = () => {
+    this.setState({ IMAGE_URL: this.state.input })
+      fetch("https://smart-brain-api-server-e2eb.onrender.com/imageURL", {
+        method: "post",
+        headers: { "Content-Type": "application/json"},
+        body: JSON.stringify({
+          input: this.state.input
+        })
+      })
+      .then(response => response.json())
+      .then(response => {
+        if (response) {
+          fetch("https://smart-brain-api-server-e2eb.onrender.com/image", {
+            method: "put",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({
+              id: this.state.user.id
+            })
+          })
+          .then(response => response.json())
+          .then(count => {
+            this.setState(Object.assign(this.state.user, { entries: count }));
+          })
+          .then(this.displayFaceBox(this.calculateFaceLocation(response)))
+          .catch(console.log())
+        }
+      })
+      .catch(error => console.log('error', error));
+  }
+
+  onRouteChange = (route) => {
+    if (route === "SignOut") {
+      this.setState(initialState)
+    } else if (route === "Home") {
+      this.setState({ isSignedIn: true })
+    }
+    this.setState({ route: route })
+  }
+
+  render() {
+    const { isSignedIn, box, IMAGE_URL, route } = this.state;
+    return (
+      <div className="App">
+        <ParticlesBg type="cobweb" bg={true} color="#ff0000" num={150} />
+        <Navigation isSignedIn={isSignedIn} onRouteChange={this.onRouteChange}/>
+        { route === "Home"
+          ? <div>
+              <Logo />
+              <Rank name={this.state.user.name} entries={this.state.user.entries} />
+              <ImageLinkForm onInputChange={this.onInputChange} onButtonSubmit={this.onButtonSubmit} />
+              <FaceRecognition box={box} IMAGE_URL={IMAGE_URL} />
+            </div>
+          : (
+              route === "SignIn"
+              ? <SignIn loadUser={this.loadUser} onRouteChange={this.onRouteChange} />
+              : <Register loadUser={this.loadUser} onRouteChange={this.onRouteChange} />
+            ) 
+        }
+      </div>
+    );
+  } 
+}
+
+export default App;
